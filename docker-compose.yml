@@ -1,0 +1,29 @@
+services:
+  # 1. Serviço de Treino
+  train:
+    build:
+      context: .
+      target: train
+    image: credit-score-train
+    container_name: container-train
+    volumes:
+      - model_store:/app/models
+
+  # 2. Serviço da API
+  api:
+    build:
+      context: .
+      target: api
+    image: credit-score-api
+    container_name: container-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_store:/app/models
+    depends_on:
+      train:
+        condition: service_completed_successfully
+
+# Volume gerido pelo Docker para partilhar o modelo entre os serviços
+volumes:
+  model_store:
