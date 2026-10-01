@@ -1,6 +1,5 @@
 import pandas as pd
 import xgboost as xgb
-import joblib
 import re
 
 from sklearn.metrics import accuracy_score, f1_score, classification_report
@@ -57,11 +56,9 @@ def train(
 
     return random_search
 
-def make_pred(
-        model,
-        artifact: dict
-    ):
-
+def prepare_input(
+    artifact: dict
+) -> pd.DataFrame:
     credit_mix = artifact['Credit_Mix'] # Categorico
     payment_min = artifact['Payment_of_Min_Amount'] # Categorico
     payment_behavior = artifact['Payment_Behaviour'] # Categorico
@@ -108,7 +105,15 @@ def make_pred(
     df["Balance_to_Salary"] = df["Monthly_Balance"] / df['Monthly_Inhand_Salary']
     df["Debt_per_Card"] = df["Outstanding_Debt"] / (df["Num_Credit_Card"] + 1)
 
-    y_pred = model.predict_proba(df)
+    return df
+
+
+def make_pred(
+        model,
+        input: pd.DataFrame
+    ):
+
+    y_pred = model.predict_proba(input)
 
     pred_dict = {
         0: "Good",
@@ -119,14 +124,9 @@ def make_pred(
     max_prob_index = list(y_pred[0]).index(max(y_pred[0]))
 
     return {"prediction":  pred_dict[max_prob_index],
+    "class_": max_prob_index,
     "probabilities":{
         'Good': float(y_pred[0][0]),
         'Poor': float(y_pred[0][1]),
         'Standard': float(y_pred[0][2])
     }}
-
-def save_model(model, path):
-    joblib.dump(model, path)
-
-def load_model(path):
-    return joblib.load(path)
