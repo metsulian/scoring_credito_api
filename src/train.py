@@ -21,10 +21,10 @@ df = load_data()
 
 logging.info('Processando features...')
 df = process_features(df)
-X_train, X_test, y_train, y_test = split_dataset(df)
+X_train, X_test, y_train, y_test, id_groups = split_dataset(df)
 
 logging.info('Treinando modelo...')
-model = train(X_train, y_train)
+model = train(X_train, y_train, id_groups)
 model = model.best_estimator_
 
 logging.info('Validando modelo...')

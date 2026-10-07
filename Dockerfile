@@ -15,7 +15,6 @@ COPY requirements/api.txt requirements/
 RUN pip install --no-cache-dir -r requirements/api.txt
 RUN useradd --create-home appuser
 COPY src/ ./src/
-COPY models/ ./models/
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s \

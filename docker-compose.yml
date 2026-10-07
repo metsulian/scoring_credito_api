@@ -7,7 +7,7 @@ services:
     image: credit-score-train
     container_name: container-train
     volumes:
-      - model_store:/app/models
+      - model_store:/app/artifacts
 
   # 2. Serviço da API
   api:
@@ -21,7 +21,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - model_store:/app/models
+      - model_store:/app/artifacts
     depends_on:
       train:
         condition: service_completed_successfully

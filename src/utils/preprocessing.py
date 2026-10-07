@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 from sklearn.preprocessing import OrdinalEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedGroupKFold
 
 FEATURE_VARIABLES = [
     'Total_EMI_per_month',
@@ -29,9 +29,7 @@ FEATURE_VARIABLES = [
 TARGET_VARIABLE = 'Credit_Score'
 
 def process_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    df = df.drop(['ID', 'SSN', 'Name', 'Customer_ID'], axis=1)
+    df = df.drop(['SSN', 'Name'], axis=1)
 
     # Extrai o padrao do Credit_History_Age e cria coluna Credit_History_Age_Years numerica
     extracted = df['Credit_History_Age'].str.extract(r'(\d+)\s*Years?\s*and\s*(\d+)\s*Months?')
@@ -111,6 +109,7 @@ def process_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Seleciona as colunas desejadas
     GOOD_VARIABLES = [
+        'Customer_ID',
         'Total_EMI_per_month',
         'Monthly_Inhand_Salary',
         'Monthly_Balance',
@@ -127,6 +126,7 @@ def process_features(df: pd.DataFrame) -> pd.DataFrame:
         'Credit_Score'
     ]
     
+    df = df[GOOD_VARIABLES]
 
     # Faz o encoding das variaveis categoricas
     colunas_texto = df.select_dtypes(include='string').columns.tolist()
@@ -135,7 +135,8 @@ def process_features(df: pd.DataFrame) -> pd.DataFrame:
     df[colunas_texto] = oe.fit_transform(df[colunas_texto])
 
     # Remove valores negativos
-    df = df.where(df >= 0, np.nan)
+    cols = df.columns.drop('Customer_ID')
+    df[cols] = df[cols].where(df[cols] >= 0, np.nan)
 
     # Adiciona features
     df["Debt_per_Card"] = df["Outstanding_Debt"] / (df["Num_Credit_Card"] + 1)
@@ -149,11 +150,18 @@ def process_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def split_dataset(
     df: pd.DataFrame,
-    test_size: float = 0.2,
     random_state = 4
 ) -> tuple:
+    ids = df.pop('Customer_ID')
     X, y = df[FEATURE_VARIABLES], df[TARGET_VARIABLE]
+    X, y = df.drop("Credit_Score", axis=1), df["Credit_Score"]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
+    splitter = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=random_state)
+    train_idx, test_idx = next(splitter.split(X, y, groups=ids))
 
-    return X_train, X_test, y_train, y_test
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+    groups_train = ids.iloc[train_idx]
+
+    return X_train, X_test, y_train, y_test, groups_train

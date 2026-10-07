@@ -2,9 +2,9 @@ import pandas as pd
 import xgboost as xgb
 import re
 
-from sklearn.metrics import accuracy_score, f1_score, classification_report
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.model_selection import RandomizedSearchCV
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold
 
 from src.config import MODEL_PATH
 
@@ -26,33 +26,55 @@ MODEL = xgb.XGBClassifier(
 
 def validate_model(model, X_test, y_test) -> dict:
     y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)
+
+    auc_macro = roc_auc_score(
+    y_test,
+    y_proba,
+    multi_class='ovr',
+    average='macro'
+    )
+
+    auc_weighted = roc_auc_score(
+        y_test,
+        y_proba,
+        multi_class='ovr',
+        average='weighted'
+    )
+
+    gini_macro = 2 * auc_macro - 1
+    gini_weighted = 2 * auc_weighted - 1
 
     acc = accuracy_score(y_test, y_pred)
     f1_macro = f1_score(y_test, y_pred, average='macro')
     f1_weighted = f1_score(y_test, y_pred, average='weighted')
-    f1_cv = float(model.best_score_)
+    f1_cv = float(model.score(X_test, y_test))
 
     return {
         "acc": acc,
         "f1_macro": f1_macro,
         "f1_weighted": f1_weighted,
-        "f1_cv": f1_cv
+        "f1_cv": f1_cv,
+        "auc_macro": auc_macro,
+        "auc_weighted": auc_weighted,
+        "gini_macro": gini_macro,
+        "gini_weighted": gini_weighted
     }
 
 def train(
-    X_train, y_train, cv: int = 5
+    X_train, y_train, id_groups, cv: int = 5
 ):
     random_search = RandomizedSearchCV(
         estimator=MODEL,
         param_distributions=PARAM_GRID,
         scoring='f1_macro',
         verbose=0,
-        cv = StratifiedKFold(n_splits=cv),
+        cv = StratifiedGroupKFold(n_splits=cv),
         random_state=4,
         n_jobs=-1
     )
 
-    random_search.fit(X_train, y_train)
+    random_search.fit(X_train, y_train, groups=id_groups)
 
     return random_search
 
