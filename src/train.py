@@ -1,8 +1,10 @@
 from src.functions.database import load_data, download_raw_data
 from src.utils.preprocessing import split_dataset, process_features
-from src.functions.model import train, validate_model, save_model
+from src.utils.jobs import save_artifact
+from src.functions.model import train, validate_model
+from src.functions.shap import make_explainer
 
-from src.config import MODEL_PATH
+from src.config import MODEL_PATH, EXPLAINER_PATH
 
 import logging
 
@@ -19,14 +21,22 @@ df = load_data()
 
 logging.info('Processando features...')
 df = process_features(df)
-X_train, X_test, y_train, y_test = split_dataset(df)
+X_train, X_test, y_train, y_test, id_groups = split_dataset(df)
 
 logging.info('Treinando modelo...')
-model = train(X_train, y_train)
+model = train(X_train, y_train, id_groups)
+model = model.best_estimator_
 
 logging.info('Validando modelo...')
 val = validate_model(model, X_test, y_test)
-print(val)
+logging.info(f'Validacao com resultado: {val}')
 
 logging.info('Salvando modelo...')
-save_model(model, MODEL_PATH)
+save_artifact(model, MODEL_PATH)
+
+logging.info('Treinando explainer...')
+explainer = make_explainer(model)
+
+logging.info('Salvando explainer...')
+save_artifact(explainer, EXPLAINER_PATH)
+

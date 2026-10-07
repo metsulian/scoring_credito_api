@@ -1,11 +1,10 @@
 import pandas as pd
 import xgboost as xgb
-import joblib
 import re
 
-from sklearn.metrics import accuracy_score, f1_score, classification_report
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.model_selection import RandomizedSearchCV
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold
 
 from src.config import MODEL_PATH
 
@@ -27,41 +26,61 @@ MODEL = xgb.XGBClassifier(
 
 def validate_model(model, X_test, y_test) -> dict:
     y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)
+
+    auc_macro = roc_auc_score(
+    y_test,
+    y_proba,
+    multi_class='ovr',
+    average='macro'
+    )
+
+    auc_weighted = roc_auc_score(
+        y_test,
+        y_proba,
+        multi_class='ovr',
+        average='weighted'
+    )
+
+    gini_macro = 2 * auc_macro - 1
+    gini_weighted = 2 * auc_weighted - 1
 
     acc = accuracy_score(y_test, y_pred)
     f1_macro = f1_score(y_test, y_pred, average='macro')
     f1_weighted = f1_score(y_test, y_pred, average='weighted')
-    f1_cv = float(model.best_score_)
+    f1_cv = float(model.score(X_test, y_test))
 
     return {
         "acc": acc,
         "f1_macro": f1_macro,
         "f1_weighted": f1_weighted,
-        "f1_cv": f1_cv
+        "f1_cv": f1_cv,
+        "auc_macro": auc_macro,
+        "auc_weighted": auc_weighted,
+        "gini_macro": gini_macro,
+        "gini_weighted": gini_weighted
     }
 
 def train(
-    X_train, y_train, cv: int = 5
+    X_train, y_train, id_groups, cv: int = 5
 ):
     random_search = RandomizedSearchCV(
         estimator=MODEL,
         param_distributions=PARAM_GRID,
         scoring='f1_macro',
         verbose=0,
-        cv = StratifiedKFold(n_splits=cv),
+        cv = StratifiedGroupKFold(n_splits=cv),
         random_state=4,
         n_jobs=-1
     )
 
-    random_search.fit(X_train, y_train)
+    random_search.fit(X_train, y_train, groups=id_groups)
 
     return random_search
 
-def make_pred(
-        model,
-        artifact: dict
-    ):
-
+def prepare_input(
+    artifact: dict
+) -> pd.DataFrame:
     credit_mix = artifact['Credit_Mix'] # Categorico
     payment_min = artifact['Payment_of_Min_Amount'] # Categorico
     payment_behavior = artifact['Payment_Behaviour'] # Categorico
@@ -108,7 +127,15 @@ def make_pred(
     df["Balance_to_Salary"] = df["Monthly_Balance"] / df['Monthly_Inhand_Salary']
     df["Debt_per_Card"] = df["Outstanding_Debt"] / (df["Num_Credit_Card"] + 1)
 
-    y_pred = model.predict_proba(df)
+    return df
+
+
+def make_pred(
+        model,
+        input: pd.DataFrame
+    ):
+
+    y_pred = model.predict_proba(input)
 
     pred_dict = {
         0: "Good",
@@ -119,14 +146,9 @@ def make_pred(
     max_prob_index = list(y_pred[0]).index(max(y_pred[0]))
 
     return {"prediction":  pred_dict[max_prob_index],
+    "class_": max_prob_index,
     "probabilities":{
         'Good': float(y_pred[0][0]),
         'Poor': float(y_pred[0][1]),
         'Standard': float(y_pred[0][2])
     }}
-
-def save_model(model, path):
-    joblib.dump(model, path)
-
-def load_model(path):
-    return joblib.load(path)
